@@ -3,16 +3,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 import random
+from PIL import Image
+import pandas as pd
 
-from torchvision.datasets import FashionMNIST
 
 
 class EnhanceImage():
 
     def __init__(self, fileSource):
         ''''''
-        self.jsonData = EnhanceImage.loadJson(fileSource)
-        print(self.jsonData)
+        # self.jsonData = EnhanceImage.loadJson(fileSource)
+        self.jsonData = fileSource
 
         # mappedData = np.interp(newValue, (min, max), (0, 255)).astype(int)
 
@@ -40,7 +41,7 @@ class EnhanceImage():
             for key, value in self.jsonData.items():
 
                 value = np.array(value)
-                newValue = np.where(value<ths, 0, 255)
+                newValue = np.where(value<th, 0, 255)
                 thresholdData[key] = newValue
             
             thresholdDataList.append(thresholdData)
@@ -73,13 +74,13 @@ class EnhanceImage():
 
             dataList.append(data)
 
-        return dataList, minMax
+        return dataList
     
 
     
     def expomential(self, coeffs):
         '''
-        f(x) = exp( coeff * x )
+        f(x) = exp( -(coeff / x) )
         input: [coeff1, coeff2, coeff3]
         output: [dict1, dict2, dict3], [[min1, max1], [min2, max2], [min3, max3]]
         dict{   'filename': image array}
@@ -88,12 +89,12 @@ class EnhanceImage():
         dataList = []
         for coeff in coeffs:
             vmin = 0
-            vmax = np.exp(coeff * 1023)
+            vmax = np.exp(-(coeff / 1023))
             data = {}
             for key, value in self.jsonData.items():
 
                 value = np.array(value)
-                newValue = np.exp(coeff * value)     
+                newValue = np.exp(-(coeff / (value+10)))     
                 mappedData = np.interp(newValue, (vmin, vmax), (0, 255)).astype(int)
 
                 data[key] =  mappedData        
@@ -182,31 +183,51 @@ class EnhanceImage():
         return data
     
 
-    def displayData(self, originalData, dataList, coeffs, title):
-        ''''''
-
-
-
-        nrows = 2
-        ncols = len(coeffs)
+    def displayData(self, originalData, dataList, coeffs, title, verbose=False):
         
-        dataFromDicts, originalDataFromDicts = self._dataFromDict(dataList, seed=42, originalData=originalData)
+        
+        nrows = 2
 
-        fig = plt.figure(size=(9, 9))
+        if verbose:
+            nrows *= 2
+        ncols = len(coeffs) + 1
+        
+        dataFromDicts, originalDataFromDicts = self._dataFromDicts(dataList, seed=42, originalData=originalData)
+
+        fig = plt.figure(figsize=(15, 5))
+
+       
+
+        fig.add_subplot(nrows, ncols, 1)
+        plt.imshow(originalDataFromDicts, cmap='gray')
+        plt.title(f"Original data")
+        plt.axis(False)
 
         for index, data in enumerate(dataFromDicts):
-
-            fig.add_subplot(nrows=nrows, ncols=ncols, index=index)
+            
+            fig.add_subplot(nrows, ncols, index+2)
             plt.imshow(data, cmap='gray')
             plt.title(f"{title} - {coeffs[index]}")
             plt.axis(False)
 
-        for index, data in enumerate(originalDataFromDicts):
+        if verbose:
 
-            fig.add_subplot(nrows=nrows, ncols=ncols, index=ncols+index)
-            plt.imshow(data, cmap='gray')
-            plt.title(f"Original data")
-            plt.axis(False)
+            # histogram of the data
+            fig.add_subplot(nrows, ncols, ncols+1)
+            plt.hist(originalDataFromDicts.ravel(), bins = 10)
+            plt.title(f"Histogram: {title} - original")
+
+            for index, data in enumerate(dataFromDicts):
+                # histogram of the data
+                fig.add_subplot(nrows, ncols, ncols+index+2)
+                plt.hist(data.ravel(), bins = 10)
+                plt.title(f"Histogram: {title} - {coeffs[index]}")
+
+
+        fig.tight_layout()
+
+        # plt.show()
+        return fig
 
 
     def analiseData(self, dataList, coeffs, title):
@@ -216,22 +237,23 @@ class EnhanceImage():
         dataFromDicts = self._dataFromDicts(dataList, seed=42)
 
 
-        fig = plt.figure(size=(9, 9))
+        fig = plt.figure(figsize=(9, 9))
 
         for index, data in enumerate(dataFromDicts):
 
             # dispaly the data
-            fig.add_subplot(nrows=nrows, ncols=ncols, index=index)
+            fig.add_subplot(nrows, ncols, index+1)
             plt.imshow(data, cmap='gray')
             plt.title(f"{title} - {coeffs[index]}")
             plt.axis(False)
 
         for index, data in enumerate(dataFromDicts):
-            
             # histogram of the data
-            fig.add_subplot(nrows=nrows, ncols=ncols, index=ncols+index)
-            plt.hist(np.array(data).shape(1, -1), bins = 15)
+            fig.add_subplot(nrows, ncols, ncols+index+1)
+            plt.hist(data.ravel(), bins = 15)
             plt.title(f"Histogram: {title} - {coeffs[index]}")
+
+        return fig
 
             
 
@@ -240,25 +262,26 @@ class EnhanceImage():
 
 
     def _dataFromDicts(self, dataList, seed=None, originalData=None):
-        dataLists_len = len(dataList)
         dataLen = len(dataList[0])
 
         if seed:
             random.seed(seed)
             
-        randInt = random.randint(0, dataLen)
-
+        randInt = random.randint(0, dataLen-1)
+        self.rand = randInt
         dataSample = []
         originalDataSample = []
         for data in dataList:
-            dataSample.append(data.values()[randInt])
+            valuesDict = np.array(list(data.values()))
+            dataSample.append(valuesDict[randInt])
 
-            if originalData:
-                originalDataSample(originalData.values()[randInt])
+        if originalData:
+            valuesDict = np.array(list(originalData.values()))[randInt]
+
 
 
         if originalData:
-            return dataSample, originalDataSample
+            return dataSample, valuesDict
 
         return dataSample
 
@@ -296,13 +319,34 @@ class EnhanceImage():
 
             
 def importTestDataset():
-    fashionData = FashionMNIST('~pytorch/F_MNIST_data', download=True)
-    dataSample = fashionData.data[:40].numpy()
+    from sklearn.datasets import load_digits
+    data, target = load_digits(as_frame=True, return_X_y=True)
+    rawData = data.values[:40]
+    # np.random.seed(42)
+    numpyData = rawData.reshape(40, 8, 8)*16 + np.random.randint(0, 100, (8, 8))
+    rawData = rawData.reshape(40, 8, 8)
+    rawImages = []
+    data={}
 
-    dimmedData = (dataSample/4).astype(int)
+    for index, datapoint in enumerate(numpyData):
+        image = Image.fromarray(datapoint)
+        imageRaw = Image.fromarray(rawData[index])
 
-    return dimmedData
+        image = image.resize((24, 24))
+        imageRaw = imageRaw.resize((24, 24))
 
+        rawImages.append(np.array(imageRaw).tolist())
+        data[f'original_{index}'] = np.array(image).tolist()
+
+
+
+    return data, rawImages
+
+
+def displayRawImage(image):
+    fig = plt.figure(figsize=(5, 5))
+    plt.imshow(image, cmap='gray')
+    plt.show()
 
 if __name__=='__main__':
     
@@ -314,7 +358,38 @@ if __name__=='__main__':
     
     
     
-    fileSource = 'awfjhawbf'
+    #fileSource = 'awfjhawbf'
+
+    dictData, rawImages = importTestDataset()
+
+    enhanceImg = EnhanceImage(dictData)
+
+    ### threshold
+    ths = [128, 255, 270, 360]
+    thresholdData = enhanceImg.threshold(ths)
+    figDsiplay = enhanceImg.displayData(dictData, thresholdData, ths, 'threshold', verbose=True)
 
 
-    enhanceImg = EnhanceImage(fileSource)
+    ### minMax mapping
+    minMax = [[10, 1000], [20, 512], [60, 256], [128, 256]]
+    minMaxData = enhanceImg.minMaxLimits(minMax)
+    figDsiplay = enhanceImg.displayData(dictData, minMaxData, minMax, 'minMax', verbose=True)
+
+
+
+    ### exponential mapping
+    coeffs = [20, 60, 90, 128]
+    expData = enhanceImg.expomential(coeffs)
+    figDsiplay = enhanceImg.displayData(dictData, expData, coeffs, 'exp', verbose=True)
+
+
+
+    ### power mapping
+    coeffs = [0.1, 0.3, 0.6, 0.8]
+    powerData = enhanceImg.power(coeffs)
+    figDsiplay = enhanceImg.displayData(dictData, powerData, coeffs, 'power', verbose=True)
+
+
+    # for debugging on testing dataset
+    rand = enhanceImg.rand
+    displayRawImage(rawImages[rand])
