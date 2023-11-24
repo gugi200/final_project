@@ -94,6 +94,22 @@ class SensorMgr():
 
         When all 24 rows are collected data is updated
         '''
+
+
+        #### TESTS ####
+        # i = 0
+        # while(1):
+        #     if i==12:
+        #         i=0
+        #     time.sleep(1)
+        #     self.dataReady = True
+
+        #     self.dataArray = np.random.randint(0, 1023, (24, 24))
+        #     self.dataArray[i:i+7, i:i+7] = 0
+        #     i += 1
+        #####
+
+
         data = np.zeros((24, 24), dtype=int)
         stopByte1 = 255
         stopByte0 = 0
@@ -126,9 +142,9 @@ class SensorMgr():
 
 
     def takePhoto(self):
-        self.photoPressure = self.dataArray
+        pressureData = self.dataArray
         cam = VideoCapture(0)
-        result, self.photo = cam.read()
+        result, photo = cam.read()
         cam.release()
         if result:
             
@@ -137,15 +153,15 @@ class SensorMgr():
 
 
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 7))
-            im1 = ax1.imshow(self.photo) # later use a.set_data(new_data)
-            im2 = ax2.imshow(self.photoPressure) # later use a.set_data(new_data)
+            im1 = ax1.imshow(photo) # later use a.set_data(new_data)
+            im2 = ax2.imshow(pressureData) # later use a.set_data(new_data)
 
             ax1.axis(False)
             ax2.axis(False)
             self.ResConf.columnconfigure(0, weight=1)
             self.ResConf.columnconfigure(1, weight=1)
 
-            buttonSave = Button(self.ResConf, text='Save', command=self.savePhoto)
+            buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData, photo))
             buttonDiscard = Button(self.ResConf, text='Discard', command=self.ResConf.destroy)
             buttonSave.grid(row=0, column=0)
             buttonDiscard.grid(row=0, column=1)
@@ -159,20 +175,20 @@ class SensorMgr():
 
         os.makedirs(name, exist_ok=True)
 
-    def savePhoto(self):
+    def savePhoto(self, pressureData, photo):
 
 
         
         self.createDir(self.title+'_cam')
-        imwrite(self.title+'_cam'+f'/{self.title}_cam_{self.saveImgCount}.jpg', np.interp(self.photo, [0,1023],[0,255]).astype(int))
+        imwrite(self.title+'_cam'+f'/{self.title}_cam_{self.saveImgCount}.jpg', np.interp(photo, [0,1023],[0,255]).astype(int))
         self.createDir(self.title+'_sensor')
-        imwrite(self.title+'_sensor'+f'/{self.title}_sensor_{self.saveImgCount}.jpg', np.interp(self.photoPressure, [0,1023],[0,255]).astype(int))
+        imwrite(self.title+'_sensor'+f'/{self.title}_sensor_{self.saveImgCount}.jpg', np.interp(pressureData [0,1023],[0,255]).astype(int))
 
         self.createDir(self.title+'_rawJSON')
 
 
         with open(self.title+'_rawJSON'+"/rawData.json", "w") as f:
-            self.rawData[f'{self.title}_sensor_{self.saveImgCount}'] = self.photoPressure.tolist()
+            self.rawData[f'{self.title}_sensor_{self.saveImgCount}'] = pressureData.tolist()
             json.dump(self.rawData, f, indent = 4)
 
         self.saveImgCount += 1
