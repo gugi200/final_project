@@ -40,6 +40,7 @@ class SensorMgr():
         self.dataReady = False
         self.title = title
         self.rawData = {}
+        self.targets = {}
         
         # animation variables
         self.figure = Figure()
@@ -160,36 +161,69 @@ class SensorMgr():
             ax2.axis(False)
             self.ResConf.columnconfigure(0, weight=1)
             self.ResConf.columnconfigure(1, weight=1)
+            self.ResConf.columnconfigure(2, weight=1)
+            self.ResConf.columnconfigure(3, weight=1)
+            self.ResConf.columnconfigure(4, weight=1)
+            self.ResConf.columnconfigure(5, weight=1)
 
             buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData, photo))
+
+            buttonSave_class1 = Button(self.ResConf, text='Save target 1', command= lambda : self.savePhoto(pressureData, photo, 1))
+            buttonSave_class2 = Button(self.ResConf, text='Save target 2', command= lambda : self.savePhoto(pressureData, photo, 2))
+            buttonSave_class3 = Button(self.ResConf, text='Save target 3', command= lambda : self.savePhoto(pressureData, photo, 3))
+            buttonSave_class4 = Button(self.ResConf, text='Save target 4', command= lambda : self.savePhoto(pressureData, photo, 4))
+            buttonSave_class5 = Button(self.ResConf, text='Save target 5', command= lambda : self.savePhoto(pressureData, photo, 5))
+
             buttonDiscard = Button(self.ResConf, text='Discard', command=self.ResConf.destroy)
-            buttonSave.grid(row=0, column=0)
-            buttonDiscard.grid(row=0, column=1)
+            buttonSave_class1.grid(row=0, column=0)
+            buttonSave_class2.grid(row=0, column=1)
+            buttonSave_class3.grid(row=0, column=2)
+            buttonSave_class4.grid(row=0, column=3)
+            buttonSave_class5.grid(row=0, column=4)
+
+            buttonDiscard.grid(row=0, column=5)
 
             canvas = FigureCanvasTkAgg(fig, master=self.ResConf)
 
-            canvas.get_tk_widget().grid(row=1, columnspan=2, column=0)
+            canvas.get_tk_widget().grid(row=1, columnspan=6, column=0)
 
 
     def createDir(self, name):
 
         os.makedirs(name, exist_ok=True)
 
-    def savePhoto(self, pressureData, photo):
+    def savePhoto(self, pressureData, photo, target):
 
-
-        
         self.createDir(self.title+'_cam')
         imwrite(self.title+'_cam'+f'/{self.title}_cam_{self.saveImgCount}.jpg', np.interp(photo, [0,1023],[0,255]).astype(int))
         self.createDir(self.title+'_sensor')
-        imwrite(self.title+'_sensor'+f'/{self.title}_sensor_{self.saveImgCount}.jpg', np.interp(pressureData [0,1023],[0,255]).astype(int))
+        imwrite(self.title+'_sensor'+f'/{self.title}_sensor_{self.saveImgCount}.jpg', np.interp(pressureData, [0,1023],[0,255]).astype(int))
 
         self.createDir(self.title+'_rawJSON')
+        self.createDir(self.title+'_target')
+
+
+        try:
+            with open(self.title+'_rawJSON'+"/rawData.json", 'r') as f:
+                oldData = json.load(f)
+        except:
+            oldData = {}
+        try:
+            with open(self.title+'_target'+"/target.json", 'r') as f:
+                oldTargets = json.load(f)
+        except:
+            oldTargets = {}
 
 
         with open(self.title+'_rawJSON'+"/rawData.json", "w") as f:
             self.rawData[f'{self.title}_sensor_{self.saveImgCount}'] = pressureData.tolist()
-            json.dump(self.rawData, f, indent = 4)
+            oldData.update(self.rawData)
+            json.dump(oldData, f, indent = 4)
+        
+        with open(self.title+'_target'+"/target.json", "w") as f:
+            self.targets[f'{self.title}_sensor_{self.saveImgCount}'] = target
+            oldTargets.update(self.targets)
+            json.dump(oldTargets, f, indent = 4)
 
         self.saveImgCount += 1
         self.ResConf.destroy()
