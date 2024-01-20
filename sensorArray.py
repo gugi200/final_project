@@ -38,6 +38,7 @@ class SensorMgr():
     def __init__(self, root=None, title='picture', imageCount=0):
         self.dataArray = np.zeros((24, 24))
         self.dataReady = False
+        self.class_names = ['hand', 'mug', 'small_fizzy','big_fizzy', 'h_bottle', 'h_big_bottle']
         self.title = title
         self.rawData = {}
         self.targets = {}
@@ -128,15 +129,15 @@ class SensorMgr():
             if  len(line)!=53:
                 logging.error("Wrong byte sequence received")
                 continue 
-
             rowNumber = line[0]
             sensorValues = [int.from_bytes(line[x:x+2], 'little') for x in range(1, 49, 2)]
-            
-            data[rowNumber] = sensorValues
+            data[rowNumber-1] = sensorValues
             if rowNumber==23:
-                
                 self.dataReady = True
+                print(data)
+                # self.dataArray = (np.exp(- ( 30/(np.array(data)+1) )  )*1023).astype(int)
                 self.dataArray = data
+                # print(self.dataArray)
 
 
 
@@ -144,20 +145,19 @@ class SensorMgr():
 
     def takePhoto(self):
         pressureData = self.dataArray
-        cam = VideoCapture(0)
-        result, photo = cam.read()
-        cam.release()
-        if result:
+        # cam = VideoCapture(0)
+        # result, photo = cam.read()
+        # cam.release()
+        if 1:
             
             self.ResConf = Toplevel(self.root)
             self.ResConf.geometry('1000x700')
 
 
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 7))
-            im1 = ax1.imshow(photo) # later use a.set_data(new_data)
+            fig, (ax2) = plt.subplots(1, 1, figsize=(10, 7))
+            # im1 = ax1.imshow(photo) # later use a.set_data(new_data)
             im2 = ax2.imshow(pressureData) # later use a.set_data(new_data)
 
-            ax1.axis(False)
             ax2.axis(False)
             self.ResConf.columnconfigure(0, weight=1)
             self.ResConf.columnconfigure(1, weight=1)
@@ -165,14 +165,16 @@ class SensorMgr():
             self.ResConf.columnconfigure(3, weight=1)
             self.ResConf.columnconfigure(4, weight=1)
             self.ResConf.columnconfigure(5, weight=1)
+            self.ResConf.columnconfigure(6, weight=1)
 
-            buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData, photo))
+            buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData))
 
-            buttonSave_class1 = Button(self.ResConf, text='Save target 1', command= lambda : self.savePhoto(pressureData, photo, 1))
-            buttonSave_class2 = Button(self.ResConf, text='Save target 2', command= lambda : self.savePhoto(pressureData, photo, 2))
-            buttonSave_class3 = Button(self.ResConf, text='Save target 3', command= lambda : self.savePhoto(pressureData, photo, 3))
-            buttonSave_class4 = Button(self.ResConf, text='Save target 4', command= lambda : self.savePhoto(pressureData, photo, 4))
-            buttonSave_class5 = Button(self.ResConf, text='Save target 5', command= lambda : self.savePhoto(pressureData, photo, 5))
+            buttonSave_class1 = Button(self.ResConf, text=f'Save {self.class_names[0]}', command= lambda : self.savePhoto(pressureData, 1))
+            buttonSave_class2 = Button(self.ResConf, text=f'Save {self.class_names[1]}', command= lambda : self.savePhoto(pressureData, 2))
+            buttonSave_class3 = Button(self.ResConf, text=f'Save {self.class_names[2]}', command= lambda : self.savePhoto(pressureData, 3))
+            buttonSave_class4 = Button(self.ResConf, text=f'Save {self.class_names[3]}', command= lambda : self.savePhoto(pressureData, 4))
+            buttonSave_class5 = Button(self.ResConf, text=f'Save {self.class_names[4]}', command= lambda : self.savePhoto(pressureData, 5))
+            buttonSave_class6 = Button(self.ResConf, text=f'Save {self.class_names[5]}', command= lambda : self.savePhoto(pressureData, 6))
 
             buttonDiscard = Button(self.ResConf, text='Discard', command=self.ResConf.destroy)
             buttonSave_class1.grid(row=0, column=0)
@@ -180,50 +182,44 @@ class SensorMgr():
             buttonSave_class3.grid(row=0, column=2)
             buttonSave_class4.grid(row=0, column=3)
             buttonSave_class5.grid(row=0, column=4)
+            buttonSave_class6.grid(row=0, column=5)
 
-            buttonDiscard.grid(row=0, column=5)
+            buttonDiscard.grid(row=0, column=len(self.class_names))
 
             canvas = FigureCanvasTkAgg(fig, master=self.ResConf)
 
-            canvas.get_tk_widget().grid(row=1, columnspan=6, column=0)
+            canvas.get_tk_widget().grid(row=1, columnspan=7, column=0)
 
 
     def createDir(self, name):
 
         os.makedirs(name, exist_ok=True)
 
-    def savePhoto(self, pressureData, photo, target):
+    def savePhoto(self, pressureData, target):
+        class_name = self.class_names[target-1]
 
-        self.createDir(self.title+'_cam')
-        imwrite(self.title+'_cam'+f'/{self.title}_cam_{self.saveImgCount}.jpg', np.interp(photo, [0,1023],[0,255]).astype(int))
-        self.createDir(self.title+'_sensor')
-        imwrite(self.title+'_sensor'+f'/{self.title}_sensor_{self.saveImgCount}.jpg', np.interp(pressureData, [0,1023],[0,255]).astype(int))
+        path_sensor = f'{self.title}_sensor/{class_name}/sensor_{self.saveImgCount}.jpg'
+        self.createDir(self.title+'_sensor'+'/'+class_name)
+        imwrite(path_sensor, np.interp(pressureData, [0,1023],[0,255]).astype(int))
 
-        self.createDir(self.title+'_rawJSON')
-        self.createDir(self.title+'_target')
+        self.createDir(f'{self.title}_rawJSON/{class_name}')
+
 
 
         try:
-            with open(self.title+'_rawJSON'+"/rawData.json", 'r') as f:
+            with open(f"{self.title}_rawJSON/{class_name}/{class_name}.json", 'r') as f:
                 oldData = json.load(f)
         except:
             oldData = {}
-        try:
-            with open(self.title+'_target'+"/target.json", 'r') as f:
-                oldTargets = json.load(f)
-        except:
-            oldTargets = {}
 
 
-        with open(self.title+'_rawJSON'+"/rawData.json", "w") as f:
-            self.rawData[f'{self.title}_sensor_{self.saveImgCount}'] = pressureData.tolist()
-            oldData.update(self.rawData)
+        rawData = {}
+        with open(f"{self.title}_rawJSON/{class_name}/{class_name}.json", "w") as f:
+            rawData[f'sensor_{self.saveImgCount}'] = pressureData.tolist()
+            oldData.update(rawData)
             json.dump(oldData, f, indent = 4)
         
-        with open(self.title+'_target'+"/target.json", "w") as f:
-            self.targets[f'{self.title}_sensor_{self.saveImgCount}'] = target
-            oldTargets.update(self.targets)
-            json.dump(oldTargets, f, indent = 4)
+
 
         self.saveImgCount += 1
         self.ResConf.destroy()
