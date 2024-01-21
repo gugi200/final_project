@@ -18,10 +18,12 @@ import pathlib
 from pathlib import Path
 import sys
 import time
+import cv2
 
 import torch
 from torch import nn
 import torchvision
+from torchvision import transforms
 from torchvision.models import resnet50, ResNet50_Weights
 
 
@@ -45,7 +47,7 @@ class SensorMgr():
         self.dataArray = np.zeros((24, 24))
         self.dataReady = False
         self.model_path = "restnet_test0.pth"
-        self.class_names = ['hand', 'mug', 'small_fizzy','big_fizzy', 'h_bottle', 'h_big_bottle']
+        self.class_names = ['hand', 'mug', 'small_fizzy','big_fizzy', 'h_bottle', 'h_big_bottle', 'nothing']
         self.title = title
         self.rawData = {}
         self.targets = {}
@@ -85,7 +87,7 @@ class SensorMgr():
         data = self.dataArray
  
         self.pressureImg.clear()
-        self.pressureImg.imshow(data, vmin=0, vmax=1024)
+        self.pressureImg.imshow(data, vmin=0, vmax=25)
         prediction, prob = self.makePrediction(data)  
         self.pressureImg.set_title(f"The placed item is {prediction} \n(probability of {prob*100}%)")
         self.canvas.draw() 
@@ -178,6 +180,7 @@ class SensorMgr():
             self.ResConf.columnconfigure(4, weight=1)
             self.ResConf.columnconfigure(5, weight=1)
             self.ResConf.columnconfigure(6, weight=1)
+            self.ResConf.columnconfigure(7, weight=1)
 
             buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData))
 
@@ -187,6 +190,7 @@ class SensorMgr():
             buttonSave_class4 = Button(self.ResConf, text=f'Save {self.class_names[3]}', command= lambda : self.savePhoto(pressureData, 4))
             buttonSave_class5 = Button(self.ResConf, text=f'Save {self.class_names[4]}', command= lambda : self.savePhoto(pressureData, 5))
             buttonSave_class6 = Button(self.ResConf, text=f'Save {self.class_names[5]}', command= lambda : self.savePhoto(pressureData, 6))
+            buttonSave_class6 = Button(self.ResConf, text=f'Save {self.class_names[6]}', command= lambda : self.savePhoto(pressureData, 7))
 
             buttonDiscard = Button(self.ResConf, text='Discard', command=self.ResConf.destroy)
             buttonSave_class1.grid(row=0, column=0)
@@ -195,12 +199,13 @@ class SensorMgr():
             buttonSave_class4.grid(row=0, column=3)
             buttonSave_class5.grid(row=0, column=4)
             buttonSave_class6.grid(row=0, column=5)
+            buttonSave_class6.grid(row=0, column=6)
 
             buttonDiscard.grid(row=0, column=len(self.class_names))
 
             canvas = FigureCanvasTkAgg(fig, master=self.ResConf)
 
-            canvas.get_tk_widget().grid(row=1, columnspan=7, column=0)
+            canvas.get_tk_widget().grid(row=1, columnspan=8, column=0)
 
 
     def createDir(self, name):
@@ -291,14 +296,29 @@ class SensorMgr():
         # load model
         self.lodaed_model.load_state_dict(torch.load(f=self.model_path))
 
-    def makePrediction(self, datapoint):
+    def makePrediction(self, data):
         class_names = ['big_fizzy', 'h_big_bottle','h_bottle', 'hand', 'mug', 'small_fizzy']
-        datapoint = torch.tensor(datapoint)
+
+        gray_data = cv2.merge([data, data, data])
+        tensor = torch.tensor(gray_data).permute([2, 0, 1])
+        tensor = tensor.type(torch.float)
+        preprocess = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize(size=(224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
+        processed_data = preprocess(tensor)
+
+
+
+
         self.lodaed_model.eval()
         with torch.inference_mode():
-            y_preds = self.lodaed_model(datapoint)
-            pred_target = y_preds.argmax(dim=1)
-            class_prob = y_preds[pred_target]
+            y_preds = self.lodaed_model(processed_data.unsqueeze(dim=0))
+            pred_target = y_preds.argmax(dim=1).squeeze()
+            class_prob = torch.softmax(y_preds, dim=1).squeeze()[pred_target]
             pred_class = class_names[pred_target]
 
 
