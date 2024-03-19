@@ -38,7 +38,22 @@ Pillow
 sudo apt-get install python3-pil python3-pil.imagetk
 '''
 
-
+def expMapping(alpha):
+    def func(data):
+        data = np.asarray(data)
+        data = np.where(data==0, 1, data)
+        mapped = np.exp(- (alpha/data))*255
+        mapped = mapped.astype(np.uint8)
+        return Image.fromarray(mapped)
+    return func
+        
+def softThresholdMapping(lower, upper):
+    def func(data):
+        data = np.asarray(data)
+        th = np.where(data>upper, 255, data)
+        th = np.where(th<lower, 0, th)
+        return Image.fromarray(th)
+    return func
 
 class SensorMgr():
 
@@ -46,8 +61,10 @@ class SensorMgr():
     def __init__(self, root=None, title='picture', imageCount=0):
         self.dataArray = np.zeros((24, 24))
         self.dataReady = False
-        self.model_path = "restnet_test0.pth"
-        self.class_names = ['hand', 'mug', 'small_fizzy','big_fizzy', 'h_bottle', 'h_big_bottle', 'nothing']
+        self.model_path = "googlenet_test6.pth"
+        self.class_names = ['big_fizzy', 'can', 'h_big_bottle','h_bottle', 'hand', 'mug', 'nothing', 'small_fizzy']
+
+
         self.title = title
         self.rawData = {}
         self.targets = {}
@@ -61,6 +78,8 @@ class SensorMgr():
         
         self.serialThread = Thread(target=self.connectArduino)
         self.serialThread.start() 
+
+ 
 
         self.importModel()
 
@@ -89,6 +108,7 @@ class SensorMgr():
         self.pressureImg.clear()
         self.pressureImg.imshow(data, vmin=0, vmax=25)
         prediction, prob = self.makePrediction(data)  
+        prediction, prob = 'fuck', 0
         self.pressureImg.set_title(f"The placed item is {prediction} \n(probability of {prob*100}%)")
         self.canvas.draw() 
         self.root.after(100, self.update)
@@ -148,6 +168,7 @@ class SensorMgr():
             data[rowNumber-1] = sensorValues
             if rowNumber==23:
                 self.dataReady = True
+                self.newDataFlag = True
                 print(data)
                 # self.dataArray = (np.exp(- ( 30/(np.array(data)+1) )  )*1023).astype(int)
                 self.dataArray = data
@@ -181,6 +202,7 @@ class SensorMgr():
             self.ResConf.columnconfigure(5, weight=1)
             self.ResConf.columnconfigure(6, weight=1)
             self.ResConf.columnconfigure(7, weight=1)
+            self.ResConf.columnconfigure(8, weight=1)
 
             buttonSave = Button(self.ResConf, text='Save', command= lambda : self.savePhoto(pressureData))
 
@@ -190,7 +212,8 @@ class SensorMgr():
             buttonSave_class4 = Button(self.ResConf, text=f'Save {self.class_names[3]}', command= lambda : self.savePhoto(pressureData, 4))
             buttonSave_class5 = Button(self.ResConf, text=f'Save {self.class_names[4]}', command= lambda : self.savePhoto(pressureData, 5))
             buttonSave_class6 = Button(self.ResConf, text=f'Save {self.class_names[5]}', command= lambda : self.savePhoto(pressureData, 6))
-            buttonSave_class6 = Button(self.ResConf, text=f'Save {self.class_names[6]}', command= lambda : self.savePhoto(pressureData, 7))
+            buttonSave_class7 = Button(self.ResConf, text=f'Save {self.class_names[6]}', command= lambda : self.savePhoto(pressureData, 7))
+            buttonSave_class8 = Button(self.ResConf, text=f'Save {self.class_names[7]}', command= lambda : self.savePhoto(pressureData, 8))
 
             buttonDiscard = Button(self.ResConf, text='Discard', command=self.ResConf.destroy)
             buttonSave_class1.grid(row=0, column=0)
@@ -199,13 +222,14 @@ class SensorMgr():
             buttonSave_class4.grid(row=0, column=3)
             buttonSave_class5.grid(row=0, column=4)
             buttonSave_class6.grid(row=0, column=5)
-            buttonSave_class6.grid(row=0, column=6)
+            buttonSave_class7.grid(row=0, column=6)
+            buttonSave_class8.grid(row=0, column=7)
 
             buttonDiscard.grid(row=0, column=len(self.class_names))
 
             canvas = FigureCanvasTkAgg(fig, master=self.ResConf)
 
-            canvas.get_tk_widget().grid(row=1, columnspan=8, column=0)
+            canvas.get_tk_widget().grid(row=1, columnspan=len(self.class_names)+1, column=0)
 
 
     def createDir(self, name):
@@ -217,7 +241,8 @@ class SensorMgr():
 
         path_sensor = f'{self.title}_sensor/{class_name}/sensor_{self.saveImgCount}.jpg'
         self.createDir(self.title+'_sensor'+'/'+class_name)
-        imwrite(path_sensor, np.interp(pressureData, [0,1023],[0,255]).astype(int))
+        upper_th = np.where(pressureData<256, pressureData, 255)
+        imwrite(path_sensor, upper_th)
 
         self.createDir(f'{self.title}_rawJSON/{class_name}')
 
@@ -289,21 +314,22 @@ class SensorMgr():
 
 
     def importModel(self):
-        class_names = ['big_fizzy', 'h_big_bottle','h_bottle', 'hand', 'mug', 'small_fizzy']
-        self.lodaed_model = resnet50(weights=ResNet50_Weights.DEFAULT)
-        self.lodaed_model.fc = nn.Linear(2048, len(class_names))
+        class_names = ['big_fizzy', 'can', 'h_big_bottle','h_bottle', 'hand', 'mug', 'nothing', 'small_fizzy']
+        self.lodaed_model = torch.hub.load('pytorch/vision', 'googlenet')
+        self.lodaed_model.fc = nn.Linear(1024, len(class_names))
 
         # load model
         self.lodaed_model.load_state_dict(torch.load(f=self.model_path))
 
     def makePrediction(self, data):
-        class_names = ['big_fizzy', 'h_big_bottle','h_bottle', 'hand', 'mug', 'small_fizzy']
+        class_names = ['big_fizzy', 'can', 'h_big_bottle','h_bottle', 'hand', 'mug', 'nothing', 'small_fizzy']
 
         gray_data = cv2.merge([data, data, data])
         tensor = torch.tensor(gray_data).permute([2, 0, 1])
         tensor = tensor.type(torch.float)
         preprocess = transforms.Compose([
-            transforms.ToPILImage(),
+            expMapping(4),
+            softThresholdMapping(30, 255),
             transforms.Resize(size=(224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
